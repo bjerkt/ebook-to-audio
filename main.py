@@ -3,10 +3,9 @@ from pathlib import Path
 from ebooklib import epub
 from bs4 import BeautifulSoup
 from google.cloud import texttospeech
-from lib import Html_Parser as HP
+from lib import Html_Parser as HP, EPUB_Reader as ER, Book_Writer as BW
 
 SKIP_NET_CALLS = False
-FILES_LOCATION = "unused for now, will define folder that contains many epubs"
 
 
 def main():
@@ -16,17 +15,46 @@ def main():
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_file
     print(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
     # Build tts profile
-    tts_client = texttospeech.TextToSpeechClient()
-    tts_voice = texttospeech.VoiceSelectionParams(
-        language_code="en-US",
-        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL,
-    )
-    tts_audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3
-    )
-    book_files = [x.name for x in pth.glob("*.epub")]
-    for book_file in book_files:
-        book = epub.read_epub(book_file)
+    tts_profile = {
+        "tts_client": texttospeech.TextToSpeechClient(),
+        "tts_voice": texttospeech.VoiceSelectionParams(
+            language_code="en-AU",
+            name="en-AU-Wavenet-A",
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+        ),
+        "tts_audio_config": texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        ),
+    }
+    # Gather all epub files
+    epub_files = [x for x in pth.glob("input/*.epub")]
+    # Gather all pdf files
+    pdf_files = []
+    # Only process to HTML here, we need the <p> tags to figure out good splicing points
+    # Process EPUBs into list of HTML chapters (many probably longer than google's 5k char limit for tts requests)
+    # {title, [chapters]}
+    epubs_as_html = ER.process_file_list(epub_files)
+    # Process pdfs into list of HTML?
+    # TODO: pdf work
+    # Content is now homogenous, concat it all
+    all_books_as_html = {}
+    all_books_as_html.update(epubs_as_html)
+    for title, chapters_html in all_books_as_html.items():
+        print(title)
+        [total_chars, total_chaps] = BW.write_book_audio(
+            title, chapters_html, tts_profile
+        )
+        print(
+            "Book was {} chars long, across {} chapters.".format(
+                total_chars, total_chaps
+            )
+        )
+    return
+    """
+    Below this can eventually be deleted
+    """
+    for book_file in epub_files:
+        book = epub.read_epub(book_file.__str__())
         # Remove spaces from book title
         book_name = book.title.replace(" ", "_")
         # Drop any other weird characters
@@ -48,18 +76,21 @@ def main():
             chapter_audio = bytearray()
             for sec_txt in chapter_secs:
                 if len(sec_txt):
-                    print("Section length: {}".format(len(sec_txt)))
-                    print(sec_txt[:50])
+                    print("    Section length: {}".format(len(sec_txt)))
+                    print("    " + sec_txt[:50])
                     # Perform the text-to-speech request
                     tts_input = texttospeech.SynthesisInput(text=sec_txt)
                     if not SKIP_NET_CALLS:
+                        print("    Making tts request...")
                         tts_response = tts_client.synthesize_speech(
                             input=tts_input,
                             voice=tts_voice,
                             audio_config=tts_audio_config,
                         )
+                        print("    Got tts response")
                     else:
                         tts_response = type("Foo", (), dict(audio_content=bytes(1024)))
+                    print("    Adding audio section to chapter")
                     chapter_audio.extend(tts_response.audio_content)
             if len(chapter_audio):
                 output_name = "output\\{}\\chapter_{:03d}.mp3".format(
@@ -67,10 +98,10 @@ def main():
                 )
                 os.makedirs(os.path.dirname(output_name), exist_ok=True)
                 # The response's audio_content is binary, open as "wb".
+                print("    Writing chapter audio as {}".format(output_name))
                 with open(output_name, "wb") as out:
                     # Write the response to the output file.
                     out.write(chapter_audio)
-                    print("Audio content written to file {}".format(output_name))
                 chap_num += 1
 
 
