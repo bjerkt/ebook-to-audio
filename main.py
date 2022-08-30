@@ -15,13 +15,37 @@ def main():
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_file
     print(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
     # Build tts profile
-    tts_profile = {
-        "tts_client": texttospeech.TextToSpeechClient(),
-        "tts_voice": texttospeech.VoiceSelectionParams(
+    # make several voices here for quick switching
+    voice = {
+        "Male-Deep-US": texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name="en-US-Wavenet-B",
+            ssml_gender=texttospeech.SsmlVoiceGender.MALE,
+        ),
+        "Female-HQ-AU": texttospeech.VoiceSelectionParams(
             language_code="en-AU",
-            name="en-AU-Wavenet-A",
+            name="en-AU-Neural2-A",
             ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
         ),
+        "Female-HQ-UK": texttospeech.VoiceSelectionParams(
+            language_code="en-GB",
+            name="en-GB-Neural2-A",
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+        ),
+        "Female-Fun-UK": texttospeech.VoiceSelectionParams(
+            language_code="en-GB",
+            name="en-GB-Wavenet-F",
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+        ),
+        "Female-Assistant-Maybe": texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name="en-US-Wavenet-F",
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+        ),
+    }
+    tts_profile = {
+        "tts_client": texttospeech.TextToSpeechClient(),
+        "tts_voice": voice["Female-HQ-UK"],
         "tts_audio_config": texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
         ),
